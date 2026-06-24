@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ASX Portfolio Optimizer</title>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f7f8fa;
+      color: #1a1a2e;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: #185FA5;
+      color: white;
+      padding: 24px 40px;
+    }
+    header h1 {
+      font-size: 1.6rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    header p {
+      font-size: 0.9rem;
+      opacity: 0.85;
+    }
+    .badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.2);
+      border: 1px solid rgba(255,255,255,0.35);
+      color: white;
+      font-size: 0.75rem;
+      padding: 3px 10px;
+      border-radius: 20px;
+      margin-top: 10px;
+      margin-right: 6px;
+    }
+
+    /* ── Layout ── */
+    main {
+      max-width: 1100px;
+      margin: 32px auto;
+      padding: 0 24px;
+    }
+
+    /* ── Loading state ── */
+    #loading-banner {
+      background: white;
+      border: 1px solid #e4e6ea;
+      border-radius: 12px;
+      padding: 48px;
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid #e4e6ea;
+      border-top-color: #185FA5;
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading-banner p { color: #666; font-size: 0.95rem; }
+
+    /* ── Error state ── */
+    #error-banner {
+      display: none;
+      background: #fff5f5;
+      border: 1px solid #fca5a5;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+      color: #991b1b;
+    }
+    #error-banner strong { display: block; margin-bottom: 6px; }
+    #error-detail {
+      font-family: monospace;
+      font-size: 0.8rem;
+      color: #7f1d1d;
+      white-space: pre-wrap;
+      margin-top: 8px;
+    }
+
+    /* ── Chart card ── */
+    #chart-card {
+      display: none;
+      background: white;
+      border: 1px solid #e4e6ea;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    /* ── Metrics row ── */
+    #metrics-row {
+      display: none;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .metric-card {
+      flex: 1;
+      background: white;
+      border: 1px solid #e4e6ea;
+      border-radius: 12px;
+      padding: 20px 24px;
+      text-align: center;
+    }
+    .metric-card .label {
+      font-size: 0.8rem;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+    }
+    .metric-card .value {
+      font-size: 1.9rem;
+      font-weight: 600;
+      color: #185FA5;
+    }
+    .metric-card .sub {
+      font-size: 0.78rem;
+      color: #aaa;
+      margin-top: 4px;
+    }
+
+    /* ── Weights table ── */
+    #weights-card {
+      display: none;
+      background: white;
+      border: 1px solid #e4e6ea;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    #weights-card h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: #1a1a2e;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    thead th {
+      text-align: left;
+      padding: 10px 14px;
+      background: #f7f8fa;
+      color: #555;
+      font-weight: 500;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border-bottom: 1px solid #e4e6ea;
+    }
+    tbody tr:hover { background: #fafbfc; }
+    tbody td {
+      padding: 11px 14px;
+      border-bottom: 1px solid #f0f1f3;
+      color: #333;
+    }
+    .bar-cell { width: 160px; }
+    .bar-bg {
+      background: #eef2f8;
+      border-radius: 4px;
+      height: 8px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      background: #185FA5;
+      height: 8px;
+      border-radius: 4px;
+      transition: width 0.6s ease;
+    }
+    .weight-pct {
+      font-weight: 600;
+      color: #185FA5;
+    }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      padding: 32px;
+      color: #aaa;
+      font-size: 0.82rem;
+    }
+    footer a { color: #185FA5; text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>ASX 200 Portfolio Optimizer</h1>
+  <p>Efficient frontier analysis · Modern Portfolio Theory · Real-time market data</p>
+  <div>
+    <span class="badge">Python + Flask</span>
+    <span class="badge">PyPortfolioOpt</span>
+    <span class="badge">Deployed on Azure</span>
+    <span class="badge">yfinance</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- Loading -->
+  <div id="loading-banner">
+    <div class="spinner"></div>
+    <p>Fetching 2 years of ASX price data and computing efficient frontier…</p>
+    <p style="margin-top:8px;font-size:0.82rem;color:#aaa">This takes about 10–20 seconds on first load</p>
+  </div>
+
+  <!-- Error -->
+  <div id="error-banner">
+    <strong>Failed to load portfolio data</strong>
+    <span id="error-msg"></span>
+    <pre id="error-detail"></pre>
+  </div>
+
+  <!-- Metrics row -->
+  <div id="metrics-row">
+    <div class="metric-card">
+      <div class="label">Expected Annual Return</div>
+      <div class="value" id="m-return">—</div>
+      <div class="sub">Max Sharpe portfolio</div>
+    </div>
+    <div class="metric-card">
+      <div class="label">Annual Volatility</div>
+      <div class="value" id="m-vol">—</div>
+      <div class="sub">Standard deviation</div>
+    </div>
+    <div class="metric-card">
+      <div class="label">Sharpe Ratio</div>
+      <div class="value" id="m-sharpe">—</div>
+      <div class="sub">Risk-free rate: 4%</div>
+    </div>
+  </div>
+
+  <!-- Chart -->
+  <div id="chart-card">
+    <div id="chart"></div>
+  </div>
+
+  <!-- Weights table -->
+  <div id="weights-card">
+    <h2>Optimal Portfolio Weights — Max Sharpe Ratio</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Ticker</th>
+          <th>Company</th>
+          <th>Weight</th>
+          <th class="bar-cell">Allocation</th>
+        </tr>
+      </thead>
+      <tbody id="weights-body"></tbody>
+    </table>
+  </div>
+
+</main>
+
+<footer>
+  Built by Yitong Dai · University of Melbourne ·
+  <a href="https://github.com/yitongdai" target="_blank">GitHub</a> ·
+  Data via Yahoo Finance · Deployed on Microsoft Azure
+</footer>
+
+<script>
+  const COMPANY_NAMES = {
+    "BHP.AX":  "BHP Group",
+    "CBA.AX":  "Commonwealth Bank",
+    "CSL.AX":  "CSL Limited",
+    "NAB.AX":  "National Australia Bank",
+    "WBC.AX":  "Westpac Banking",
+    "ANZ.AX":  "ANZ Banking Group",
+    "WES.AX":  "Wesfarmers",
+    "MQG.AX":  "Macquarie Group",
+    "RIO.AX":  "Rio Tinto",
+    "TLS.AX":  "Telstra",
+  };
+
+  function pct(v) { return (v * 100).toFixed(1) + "%"; }
+
+  fetch("/api/frontier")
+    .then(res => res.json())
+    .then(data => {
+      document.getElementById("loading-banner").style.display = "none";
+
+      if (data.status === "error") {
+        document.getElementById("error-banner").style.display = "block";
+        document.getElementById("error-msg").textContent = data.message;
+        document.getElementById("error-detail").textContent = data.detail || "";
+        return;
+      }
+
+      // ── Metrics ──
+      const m = data.metrics;
+      document.getElementById("m-return").textContent  = pct(m.expected_return);
+      document.getElementById("m-vol").textContent     = pct(m.volatility);
+      document.getElementById("m-sharpe").textContent  = m.sharpe_ratio.toFixed(2);
+
+      const metricsRow = document.getElementById("metrics-row");
+      metricsRow.style.display = "flex";
+
+      // ── Chart ──
+      const chartCard = document.getElementById("chart-card");
+      chartCard.style.display = "block";
+      Plotly.newPlot("chart", data.chart.data, data.chart.layout, {
+        responsive: true,
+        displayModeBar: true,
+        modeBarButtonsToRemove: ["lasso2d", "select2d"]
+      });
+
+      // ── Weights table ──
+      const weights = data.weights;
+      const maxW = Math.max(...Object.values(weights));
+      const tbody = document.getElementById("weights-body");
+
+      Object.entries(weights)
+        .sort((a, b) => b[1] - a[1])
+        .forEach(([ticker, w]) => {
+          const barWidth = ((w / maxW) * 100).toFixed(1);
+          const name = COMPANY_NAMES[ticker] || ticker;
+          tbody.innerHTML += `
+            <tr>
+              <td><strong>${ticker}</strong></td>
+              <td>${name}</td>
+              <td class="weight-pct">${pct(w)}</td>
+              <td class="bar-cell">
+                <div class="bar-bg">
+                  <div class="bar-fill" style="width:${barWidth}%"></div>
+                </div>
+              </td>
+            </tr>`;
+        });
+
+      document.getElementById("weights-card").style.display = "block";
+    })
+    .catch(err => {
+      document.getElementById("loading-banner").style.display = "none";
+      document.getElementById("error-banner").style.display = "block";
+      document.getElementById("error-msg").textContent = err.message;
+    });
+</script>
+
+</body>
+</html>
